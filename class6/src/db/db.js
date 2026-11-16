@@ -6,6 +6,9 @@ async function connectDB() {
   if (!uri) {
     throw new Error("MONGODB_URI is not configured")
   }
+  if (/<(?:username|password|cluster|database)>/i.test(uri)) {
+    throw new Error("MONGODB_URI still contains example placeholders. Replace them with your MongoDB connection details in class6/.env.")
+  }
 
   await mongoose.connect(uri)
   await appointmentModel.init()

@@ -134,7 +134,7 @@ async function listPatientAppointments(req, res) {
             .populate(populatedAppointment)
             .sort({ appointmentDate: -1, appointmentTime: -1 })
         const notifications = appointments
-            .filter(appointment => ["approved", "rejected"].includes(appointment.status) && !appointment.patientNotifiedAt)
+            .filter(appointment => ["approved", "rejected", "cancelled"].includes(appointment.status) && !appointment.patientNotifiedAt)
             .map(appointment => ({
                 appointmentId: appointment._id,
                 status: appointment.status,
@@ -173,7 +173,7 @@ async function markAppointmentNotificationRead(req, res) {
             {
                 _id: req.params.id,
                 patient: req.user._id,
-                status: { $in: ["approved", "rejected"] },
+                status: { $in: ["approved", "rejected", "cancelled"] },
                 patientNotifiedAt: null
             },
             { $set: { patientNotifiedAt: new Date() } },
@@ -238,6 +238,49 @@ async function updateDoctorAppointment(req, res) {
             return res.status(409).json({ message: "This appointment time is already booked. The request remains pending." })
         }
         console.error("Could not update appointment:", error)
+        return res.status(500).json({ message: "Could not update appointment" })
+    }
+}
+
+async function updateAdminAppointment(req, res) {
+    try {
+        const { status } = req.body ?? {}
+        if (!["approved", "cancelled"].includes(status)) {
+            return res.status(400).json({ message: "Admin can confirm or cancel an appointment" })
+        }
+
+        const filter = {
+            _id: req.params.id,
+            status: status === "approved" ? "pending" : { $in: ["pending", "approved"] }
+        }
+        const update = { $set: { status, patientNotifiedAt: null } }
+        if (status === "approved") {
+            const current = await appointmentModel.findOne(filter).select("doctor appointmentDate appointmentTime")
+            if (!current) {
+                return res.status(404).json({ message: "Pending appointment not found. It may already have been updated." })
+            }
+            update.$set.activeSlotKey = `${current.doctor}:${current.appointmentDate.toISOString().slice(0, 10)}:${current.appointmentTime}`
+        } else {
+            update.$unset = { activeSlotKey: "" }
+        }
+
+        const appointment = await appointmentModel.findOneAndUpdate(
+            filter,
+            update,
+            { new: true, runValidators: true }
+        ).populate(populatedAppointment)
+        if (!appointment) {
+            return res.status(404).json({ message: "Appointment not found or is no longer eligible for this action" })
+        }
+        return res.json({ appointment })
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(404).json({ message: "Appointment not found" })
+        }
+        if (error.code === 11000) {
+            return res.status(409).json({ message: "This doctor already has an active appointment at that time." })
+        }
+        console.error("Could not update appointment as admin:", error)
         return res.status(500).json({ message: "Could not update appointment" })
     }
 }
@@ -393,6 +436,7 @@ export {
     markAppointmentNotificationRead,
     listDoctorAppointments,
     updateDoctorAppointment,
+    updateAdminAppointment,
     getAdminDashboard,
     listAdminUsers,
     listAdminAppointments,

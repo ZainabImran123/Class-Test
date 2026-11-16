@@ -14,6 +14,7 @@ import {
     listPatientAppointments,
     markAppointmentNotificationRead,
     updateDoctorAppointment,
+    updateAdminAppointment,
     updateUserStatus
 } from "../controllers/clinic.controller.js"
 import { authenticate, requireRole } from "../middleware/auth.middleware.js"
@@ -38,6 +39,7 @@ router.patch("/doctor/appointments/:id", requireRole("doctor"), updateDoctorAppo
 router.get("/admin/dashboard", requireRole("admin"), getAdminDashboard)
 router.get("/admin/users", requireRole("admin"), listAdminUsers)
 router.get("/admin/appointments", requireRole("admin"), listAdminAppointments)
+router.patch("/admin/appointments/:id/status", requireRole("admin"), updateAdminAppointment)
 router.get("/admin/stats", requireRole("admin"), getAdminStats)
 router.post("/admin/doctors", requireRole("admin"), createDoctor)
 router.patch("/admin/users/:id/status", requireRole("admin"), updateUserStatus)

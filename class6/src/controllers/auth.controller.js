@@ -115,7 +115,8 @@ async function registerUser(req, res) {
             return res.status(409).json({ message: "An account with that email or username already exists. Please sign in or choose another email." })
         }
         console.error("Registration failed:", error)
-        if (error.name === "MongooseError" || error.name === "MongoServerSelectionError") {
+        if (error.name === "MongooseError" || error.name === "MongoServerSelectionError"
+            || error.name === "MongoNetworkError" || error.name === "MongoParseError") {
             return res.status(503).json({ message: "The clinic database is unavailable. Configure a valid MONGODB_URI in class6/.env and restart the backend." })
         }
         return res.status(500).json({ message: "Could not create account" })

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { GoogleLogin } from "@react-oauth/google"
 import gsap from "gsap"
+import Swal from "sweetalert2"
+import "sweetalert2/dist/sweetalert2.min.css"
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000"
 
@@ -35,8 +37,6 @@ function App({ googleEnabled }) {
   const [mode, setMode] = useState("login")
   const [form, setForm] = useState({ name: "", email: "", password: "" })
   const [dashboard, setDashboard] = useState(null)
-  const [message, setMessage] = useState("")
-  const [messageType, setMessageType] = useState("error")
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [theme, setTheme] = useState(() => localStorage.getItem("carewell-theme") === "dark" ? "dark" : "light")
@@ -44,8 +44,18 @@ function App({ googleEnabled }) {
   const authMotionRoot = useRef(null)
 
   const showMessage = useCallback((text, type = "error") => {
-    setMessage(text)
-    setMessageType(type)
+    void Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: type === "success" ? "success" : "error",
+      title: text,
+      showConfirmButton: false,
+      timer: type === "success" ? 2800 : 5500,
+      timerProgressBar: true,
+      showClass: { popup: "carewell-swal-show" },
+      hideClass: { popup: "carewell-swal-hide" },
+      customClass: { popup: "carewell-swal-toast" }
+    })
   }, [])
 
   useEffect(() => {
@@ -145,7 +155,6 @@ function App({ googleEnabled }) {
   async function submit(event) {
     event.preventDefault()
     setBusy(true)
-    setMessage("")
     try {
       const result = await api(`/api/auth/${mode === "signup" ? "register" : "login"}`, {
         method: "POST",
@@ -227,8 +236,6 @@ function App({ googleEnabled }) {
             <p>{roleDescription(user.role)}</p>
           </div>
 
-          {message && <p className={`clinic-feedback ${messageType}`} role="status">{message}</p>}
-
           {user.role === "patient" && (
             <PatientDashboard
               appointments={dashboard?.appointments || []}
@@ -287,9 +294,9 @@ function App({ googleEnabled }) {
 
           <div className="mode-tabs" role="tablist" aria-label="Choose sign in or sign up">
             <button type="button" role="tab" aria-selected={!signup} className={!signup ? "active" : ""}
-              onClick={() => { setMode("login"); setMessage("") }}>Sign in</button>
+              onClick={() => setMode("login")}>Sign in</button>
             <button type="button" role="tab" aria-selected={signup} className={signup ? "active" : ""}
-              onClick={() => { setMode("signup"); setMessage("") }}>Patient registration</button>
+              onClick={() => setMode("signup")}>Patient registration</button>
           </div>
 
           {googleEnabled && (
@@ -332,7 +339,6 @@ function App({ googleEnabled }) {
               {busy ? "Please wait…" : signup ? "Create patient account" : "Sign in"} {!busy && <span aria-hidden="true">→</span>}
             </button>
           </form>
-          {message && <p className={`feedback visible ${messageType}`} role="status" aria-live="polite">{message}</p>}
           <p className="auth-note">Doctor and administrator accounts are provided by the clinic.</p>
         </div>
         <footer className="form-foot">Thoughtfully made for your health <span aria-hidden="true">✦</span></footer>
@@ -458,7 +464,7 @@ function PatientDashboard({ appointments, notifications, refresh, showMessage })
             {notifications.map(notification => (
               <article className={`notification-item ${notification.status}`} key={notification.appointmentId}>
                 <span className="notification-icon" aria-hidden="true">{notification.status === "approved" ? "✓" : "!"}</span>
-                <div><strong>{notification.status === "approved" ? "Appointment approved" : "Appointment not approved"}</strong>
+                <div><strong>{notification.status === "approved" ? "Appointment approved" : notification.status === "cancelled" ? "Appointment cancelled" : "Appointment not approved"}</strong>
                   <p>{notification.message}</p>
                   <small>{new Date(notification.appointmentDate).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })} · {notification.appointmentTime}</small>
                 </div>
@@ -572,6 +578,7 @@ function DoctorDashboard({ user, appointments, total, refresh, showMessage }) {
 function AdminDashboard({ data, refresh, showMessage }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", specialization: "", experience: "0", profilePicture: "" })
   const [busy, setBusy] = useState(false)
+  const [appointmentBusyId, setAppointmentBusyId] = useState("")
   const [filter, setFilter] = useState("all")
   const [appointmentSearch, setAppointmentSearch] = useState("")
   const users = data?.users || []
@@ -613,13 +620,70 @@ function AdminDashboard({ data, refresh, showMessage }) {
   }
 
   async function removeUser(user) {
-    if (!window.confirm(`Delete ${displayName(user)} and all of their appointments?`)) return
+    const confirmation = await Swal.fire({
+      title: "Delete this account?",
+      text: `Delete ${displayName(user)} and all of their appointments? This cannot be undone.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete account",
+      cancelButtonText: "Keep account",
+      reverseButtons: true,
+      focusCancel: true,
+      showClass: { popup: "carewell-swal-show" },
+      hideClass: { popup: "carewell-swal-hide" },
+      customClass: {
+        popup: "carewell-swal-modal",
+        confirmButton: "carewell-swal-confirm",
+        cancelButton: "carewell-swal-cancel",
+        actions: "carewell-swal-actions"
+      }
+    })
+    if (!confirmation.isConfirmed) return
     try {
       await api(`/api/admin/users/${user.id}`, { method: "DELETE" })
       showMessage("User and related appointments deleted.", "success")
       await refresh()
     } catch (error) {
       showMessage(error.message)
+    }
+  }
+
+  async function updateAppointmentStatus(appointment, status) {
+    const confirming = status === "approved"
+    const result = await Swal.fire({
+      title: confirming ? "Confirm this appointment?" : "Cancel this appointment?",
+      text: confirming
+        ? `Confirm ${displayName(appointment.patient)}'s appointment with Dr. ${displayName(appointment.doctor)}?`
+        : `Cancel ${displayName(appointment.patient)}'s appointment with Dr. ${displayName(appointment.doctor)}?`,
+      icon: confirming ? "question" : "warning",
+      showCancelButton: true,
+      confirmButtonText: confirming ? "Confirm appointment" : "Cancel appointment",
+      cancelButtonText: "Go back",
+      reverseButtons: true,
+      focusCancel: true,
+      showClass: { popup: "carewell-swal-show" },
+      hideClass: { popup: "carewell-swal-hide" },
+      customClass: {
+        popup: "carewell-swal-modal",
+        confirmButton: confirming ? "carewell-swal-confirm" : "carewell-swal-danger",
+        cancelButton: "carewell-swal-cancel",
+        actions: "carewell-swal-actions"
+      }
+    })
+    if (!result.isConfirmed) return
+
+    setAppointmentBusyId(appointment._id)
+    try {
+      await api(`/api/admin/appointments/${appointment._id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status })
+      })
+      showMessage(confirming ? "Appointment confirmed." : "Appointment cancelled.", "success")
+      await refresh()
+    } catch (error) {
+      showMessage(error.message)
+    } finally {
+      setAppointmentBusyId("")
     }
   }
 
@@ -677,7 +741,12 @@ function AdminDashboard({ data, refresh, showMessage }) {
           <span className="sr-only">Search appointments by patient name</span><span aria-hidden="true">⌕</span>
           <input value={appointmentSearch} onChange={event => setAppointmentSearch(event.target.value)} placeholder="Search by patient name" />
         </label>
-        <AppointmentList appointments={shownAppointments} audience="admin" />
+        <AppointmentList
+          appointments={shownAppointments}
+          audience="admin"
+          busyId={appointmentBusyId}
+          onStatusChange={updateAppointmentStatus}
+        />
       </section>
     </>
   )
@@ -729,7 +798,22 @@ function AppointmentList({ appointments, audience, onCancel, onStatusChange, bus
                 </div>
               )}
               {audience === "patient" && appointment.status === "pending" && (
-                <button type="button" className="text-button danger-text" onClick={() => onCancel(appointment._id)}>Cancel request</button>
+                <button type="button" className="text-button danger-text" disabled={busyId === appointment._id}
+                  onClick={() => onCancel(appointment._id)}>Cancel request</button>
+              )}
+              {audience === "admin" && ["pending", "approved"].includes(appointment.status) && (
+                <div className="row-actions appointment-admin-actions">
+                  {appointment.status === "pending" && (
+                    <button type="button" className="text-button" disabled={busyId === appointment._id}
+                      onClick={() => onStatusChange(appointment, "approved")}>
+                      {busyId === appointment._id ? "Updating…" : "Confirm"}
+                    </button>
+                  )}
+                  <button type="button" className="text-button danger-text" disabled={busyId === appointment._id}
+                    onClick={() => onStatusChange(appointment, "cancelled")}>
+                    {busyId === appointment._id ? "Updating…" : "Cancel"}
+                  </button>
+                </div>
               )}
             </div>
           </article>

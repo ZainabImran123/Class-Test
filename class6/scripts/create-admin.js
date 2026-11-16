@@ -6,8 +6,8 @@ const name = process.env.ADMIN_NAME?.trim()
 const email = process.env.ADMIN_EMAIL?.trim().toLowerCase()
 const password = process.env.ADMIN_PASSWORD
 
-if (!name || !email || !password || password.length < 8) {
-    console.error("Set ADMIN_NAME, ADMIN_EMAIL, and ADMIN_PASSWORD (at least 8 characters) in class6/.env.")
+if (!name || !email || !password || password.length < 12) {
+    console.error("Set ADMIN_NAME, ADMIN_EMAIL, and a strong ADMIN_PASSWORD (at least 12 characters) in class6/.env.")
     process.exitCode = 1
 } else {
     try {

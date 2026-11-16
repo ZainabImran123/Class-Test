@@ -376,3 +376,31 @@ button, a { -webkit-tap-highlight-color: transparent; }
 :root[data-theme="dark"] .clinic-feedback { border-color: #563a36; color: #f0b8ae; background: #30221f; }
 :root[data-theme="dark"] .clinic-feedback.success { border-color: #31523c; color: #b9dfc2; background: #1e3024; }
 :root[data-theme="dark"] .loading-screen { color: #bfd0c5; background: #111815; }
+
+.carewell-swal-show { animation: carewell-dialog-in .24s cubic-bezier(.2, .8, .2, 1) both; }
+.carewell-swal-hide { animation: carewell-dialog-out .16s ease-in both; }
+.swal2-popup.carewell-swal-toast { border: 1px solid #e4ebe5; border-radius: 12px; color: #2b3d34; background: #fff; box-shadow: 0 12px 40px #1c32221f; }
+.swal2-popup.carewell-swal-modal { border-radius: 14px; color: #2b3d34; background: #fff; box-shadow: 0 20px 70px #10221840; }
+.swal2-popup.carewell-swal-modal .swal2-title { color: #293b33; font-size: 21px; }
+.swal2-popup.carewell-swal-modal .swal2-html-container { color: #64736a; font-size: 13px; line-height: 1.65; }
+.swal2-popup .carewell-swal-actions { gap: 9px; }
+.swal2-popup .carewell-swal-confirm,
+.swal2-popup .carewell-swal-cancel { min-height: 39px; padding: 0 16px; border: 0; border-radius: 7px; font-size: 12px; font-weight: 600; }
+.swal2-popup .carewell-swal-confirm { color: #fff; background: #a6443e; }
+.swal2-popup .carewell-swal-cancel { color: #4b6256; background: #edf2ee; }
+:root[data-theme="dark"] .swal2-popup.carewell-swal-toast,
+:root[data-theme="dark"] .swal2-popup.carewell-swal-modal { border-color: #39483e; color: #e4ece6; background: #1b2520; box-shadow: 0 18px 60px #0007; }
+:root[data-theme="dark"] .swal2-popup.carewell-swal-modal .swal2-title { color: #e7eee9; }
+:root[data-theme="dark"] .swal2-popup.carewell-swal-modal .swal2-html-container { color: #b6c2ba; }
+:root[data-theme="dark"] .swal2-popup .carewell-swal-cancel { color: #d3ded6; background: #334139; }
+@keyframes carewell-dialog-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(.97); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes carewell-dialog-out {
+  to { opacity: 0; transform: translate3d(0, 6px, 0) scale(.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .carewell-swal-show,
+  .carewell-swal-hide { animation-duration: .01ms; }
+}
