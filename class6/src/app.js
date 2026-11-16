@@ -4,8 +4,18 @@ import clinicRoutes from "./routes/clinic.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 const app = express();
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+    .split(",")
+    .map(origin => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean)
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true)
+        }
+        return callback(new Error("This frontend origin is not allowed by the clinic API"))
+    },
     credentials: true
 }));
 app.use(express.json());

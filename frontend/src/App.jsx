@@ -4,7 +4,7 @@ import gsap from "gsap"
 import Swal from "sweetalert2"
 import "sweetalert2/dist/sweetalert2.min.css"
 
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000"
+const apiUrl = (import.meta.env.VITE_API_URL || "https://class-test-orcin.vercel.app").replace(/\/+$/, "")
 
 async function api(path, options = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
