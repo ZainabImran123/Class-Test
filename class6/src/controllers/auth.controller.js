@@ -9,10 +9,35 @@ const googleClient = new OAuth2Client()
 function getJwtSecret() {
     const secret = process.env.JWT_SECRET
     if (!secret || secret.length < 32) {
-        throw new Error("JWT_SECRET must be configured with at least 32 characters")
+        const error = new Error("JWT_SECRET must be configured with at least 32 characters")
+        error.code = "JWT_SECRET_NOT_CONFIGURED"
+        throw error
     }
 
     return secret
+}
+
+function getServiceConfigurationErrorResponse(error, res) {
+    if (error.code === "JWT_SECRET_NOT_CONFIGURED") {
+        return res.status(503).json({
+            message: "Authentication is not configured. Set JWT_SECRET (at least 32 characters) in the backend environment and redeploy."
+        })
+    }
+
+    if ([
+        "MongooseError",
+        "MongoServerSelectionError",
+        "MongoNetworkError",
+        "MongoNetworkTimeoutError",
+        "MongoParseError",
+        "MongoServerError"
+    ].includes(error.name)) {
+        return res.status(503).json({
+            message: "The clinic database is unavailable. Verify MONGODB_URI in the backend hosting environment (Vercel Project Settings > Environment Variables), then redeploy."
+        })
+    }
+
+    return null
 }
 
 function issueToken(user, res, secret) {
@@ -70,14 +95,14 @@ async function registerUser(req, res) {
         const isAdminEmail = Boolean(configuredAdminEmail && email === configuredAdminEmail)
         if (isAdminEmail && !matchesAdminBootstrapPassword(password)) {
             return res.status(403).json({
-                message: "This email is reserved for the clinic administrator. Set ADMIN_PASSWORD in class6/.env to enable its one-time sign-up, or provision it with npm run create-admin."
+                message: "This email is reserved for the clinic administrator. Set ADMIN_PASSWORD in the backend environment to enable its one-time sign-up, or provision it with npm run create-admin."
             })
         }
 
         if (isAdminEmail) {
             if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 12) {
                 return res.status(503).json({
-                    message: "Admin sign-up needs a strong ADMIN_PASSWORD (at least 12 characters) in class6/.env."
+                    message: "Admin sign-up needs a strong ADMIN_PASSWORD (at least 12 characters) in the backend environment."
                 })
             }
             if (await userModel.exists({ role: "admin" })) {
@@ -115,10 +140,8 @@ async function registerUser(req, res) {
             return res.status(409).json({ message: "An account with that email or username already exists. Please sign in or choose another email." })
         }
         console.error("Registration failed:", error)
-        if (error.name === "MongooseError" || error.name === "MongoServerSelectionError"
-            || error.name === "MongoNetworkError" || error.name === "MongoParseError") {
-            return res.status(503).json({ message: "The clinic database is unavailable. Configure a valid MONGODB_URI in class6/.env and restart the backend." })
-        }
+        const configurationResponse = getServiceConfigurationErrorResponse(error, res)
+        if (configurationResponse) return configurationResponse
         return res.status(500).json({ message: "Could not create account" })
     }
 }
@@ -152,7 +175,7 @@ async function loginUser(req, res) {
             && identifier.toLowerCase() === configuredAdminEmail
             && user?.role !== "admin") {
             return res.status(503).json({
-                message: "The clinic administrator account is not provisioned yet. Configure ADMIN_PASSWORD and a valid MONGODB_URI in class6/.env, then sign up once with the configured admin email and password, or run npm run create-admin."
+                message: "The clinic administrator account is not provisioned yet. Configure ADMIN_PASSWORD and MONGODB_URI in the backend environment, then sign up once with the configured admin email and password, or run npm run create-admin."
             })
         }
         if (!user || !user.password || !await bcrypt.compare(password, user.password)) {
@@ -169,6 +192,8 @@ async function loginUser(req, res) {
         })
     } catch (error) {
         console.error("Login failed:", error)
+        const configurationResponse = getServiceConfigurationErrorResponse(error, res)
+        if (configurationResponse) return configurationResponse
         return res.status(500).json({ message: "Could not log in" })
     }
 }
