@@ -4,7 +4,7 @@ import clinicRoutes from "./routes/clinic.routes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 const app = express();
-const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173,https://class-test-pwol.vercel.app")
     .split(",")
     .map(origin => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean)
