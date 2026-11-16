@@ -17,11 +17,20 @@ import {
     updateAdminAppointment,
     updateUserStatus
 } from "../controllers/clinic.controller.js"
+import {
+    listNotifications,
+    markAllNotificationsRead,
+    markNotificationRead
+} from "../controllers/notification.controller.js"
 import { authenticate, requireRole } from "../middleware/auth.middleware.js"
 
 const router = express.Router()
 
 router.use(authenticate)
+
+router.get("/notifications", listNotifications)
+router.patch("/notifications/read-all", markAllNotificationsRead)
+router.patch("/notifications/:id/read", markNotificationRead)
 
 router.get("/doctors", listDoctors)
 router.get("/doctors/:id", getDoctorById)

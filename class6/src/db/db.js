@@ -1,5 +1,6 @@
 ﻿import mongoose from "mongoose"
 import appointmentModel from "../models/appointments.model.js"
+import notificationModel from "../models/notifications.model.js"
 
 async function connectDB() {
   const uri = process.env.MONGODB_URI
@@ -11,7 +12,7 @@ async function connectDB() {
   }
 
   await mongoose.connect(uri)
-  await appointmentModel.init()
+  await Promise.all([appointmentModel.init(), notificationModel.init()])
   console.log("Connected to DB")
 }
 

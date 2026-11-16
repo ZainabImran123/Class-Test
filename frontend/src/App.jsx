@@ -37,6 +37,8 @@ function App({ googleEnabled }) {
   const [mode, setMode] = useState("login")
   const [form, setForm] = useState({ name: "", email: "", password: "" })
   const [dashboard, setDashboard] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [theme, setTheme] = useState(() => localStorage.getItem("carewell-theme") === "dark" ? "dark" : "light")
@@ -84,6 +86,12 @@ function App({ googleEnabled }) {
     setDashboard(result)
     return result
   }, [user?.role])
+
+  const loadNotifications = useCallback(async () => {
+    const result = await api("/api/notifications")
+    setNotifications(result.notifications)
+    setUnreadCount(result.unreadCount)
+  }, [])
 
   useLayoutEffect(() => {
     if (!user || !dashboardMotionRoot.current) return undefined
@@ -134,19 +142,24 @@ function App({ googleEnabled }) {
   useEffect(() => {
     if (!user) {
       setDashboard(null)
+      setNotifications([])
+      setUnreadCount(0)
       return
     }
     let active = true
-    const refreshDashboard = () => loadDashboard(user.role).catch(error => {
+    const refreshWorkspace = () => Promise.all([
+      loadDashboard(user.role),
+      loadNotifications()
+    ]).catch(error => {
       if (active) showMessage(error.message)
     })
-    refreshDashboard()
-    const notificationPoll = user.role === "patient" ? window.setInterval(refreshDashboard, 30000) : null
+    refreshWorkspace()
+    const notificationPoll = window.setInterval(refreshWorkspace, 20000)
     return () => {
       active = false
-      if (notificationPoll !== null) window.clearInterval(notificationPoll)
+      window.clearInterval(notificationPoll)
     }
-  }, [user, loadDashboard, showMessage])
+  }, [user, loadDashboard, loadNotifications, showMessage])
 
   function updateForm(event) {
     setForm(current => ({ ...current, [event.target.name]: event.target.value }))
@@ -192,6 +205,8 @@ function App({ googleEnabled }) {
       await api("/api/auth/logout", { method: "POST" })
       setUser(null)
       setDashboard(null)
+      setNotifications([])
+      setUnreadCount(0)
       setForm({ name: "", email: "", password: "" })
       showMessage("You have been signed out.", "success")
     } catch (error) {
@@ -201,7 +216,29 @@ function App({ googleEnabled }) {
 
   async function refresh() {
     try {
-      await loadDashboard(user?.role)
+      await Promise.all([loadDashboard(user?.role), loadNotifications()])
+    } catch (error) {
+      showMessage(error.message)
+    }
+  }
+
+  async function markNotificationRead(notificationId) {
+    try {
+      await api(`/api/notifications/${notificationId}/read`, { method: "PATCH" })
+      setNotifications(current => current.map(notification => notification._id === notificationId
+        ? { ...notification, isRead: true }
+        : notification))
+      setUnreadCount(current => Math.max(0, current - 1))
+    } catch (error) {
+      showMessage(error.message)
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      await api("/api/notifications/read-all", { method: "PATCH" })
+      setNotifications(current => current.map(notification => ({ ...notification, isRead: true })))
+      setUnreadCount(0)
     } catch (error) {
       showMessage(error.message)
     }
@@ -220,6 +257,7 @@ function App({ googleEnabled }) {
             <span>carewell<span className="brand-subtitle">CLINIC</span></span>
           </a>
           <div className="header-account">
+            {unreadCount > 0 && <span className="header-notification-count" aria-label={`${unreadCount} unread notifications`}>{unreadCount} new</span>}
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="account-copy">
               <strong>{displayName(user)}</strong>
@@ -236,10 +274,16 @@ function App({ googleEnabled }) {
             <p>{roleDescription(user.role)}</p>
           </div>
 
+          <NotificationCenter
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onMarkRead={markNotificationRead}
+            onMarkAllRead={markAllNotificationsRead}
+          />
+
           {user.role === "patient" && (
             <PatientDashboard
               appointments={dashboard?.appointments || []}
-              notifications={dashboard?.notifications || []}
               refresh={refresh}
               showMessage={showMessage}
             />
@@ -353,6 +397,42 @@ function roleDescription(role) {
   return "Find a doctor and keep track of your appointments."
 }
 
+function NotificationCenter({ notifications, unreadCount, onMarkRead, onMarkAllRead }) {
+  return (
+    <section className="panel notification-panel" aria-label="Notifications">
+      <div className="section-heading">
+        <div><span className="eyebrow">CLINIC ACTIVITY</span><h2>Notifications</h2></div>
+        <div className="notification-heading-actions">
+          <span className="notification-count">{unreadCount} unread</span>
+          {unreadCount > 0 && <button type="button" className="text-button" onClick={onMarkAllRead}>Mark all read</button>}
+        </div>
+      </div>
+      {notifications.length > 0 ? (
+        <div className="notification-list">
+          {notifications.map(notification => (
+            <article
+              className={`notification-item ${notification.status || notification.type} ${notification.isRead ? "read" : "unread"}`}
+              key={notification._id}
+            >
+              <span className="notification-icon" aria-hidden="true">
+                {notification.type === "patient_registered" ? "+" : notification.type === "appointment_booked" ? "⌚" : notification.status === "approved" ? "✓" : "!"}
+              </span>
+              <div>
+                <strong>{notification.title}</strong>
+                <p>{notification.message}</p>
+                <small>{new Date(notification.createdAt).toLocaleString()}</small>
+              </div>
+              {!notification.isRead && (
+                <button type="button" className="text-button" onClick={() => onMarkRead(notification._id)}>Mark read</button>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : <p className="empty-state">You’re all caught up. New clinic activity will appear here.</p>}
+    </section>
+  )
+}
+
 function ThemeToggle({ theme, onToggle }) {
   const isDark = theme === "dark"
   return (
@@ -374,7 +454,7 @@ function ThemeToggle({ theme, onToggle }) {
   )
 }
 
-function PatientDashboard({ appointments, notifications, refresh, showMessage }) {
+function PatientDashboard({ appointments, refresh, showMessage }) {
   const [doctors, setDoctors] = useState([])
   const [search, setSearch] = useState("")
   const [specialization, setSpecialization] = useState("")
@@ -435,15 +515,6 @@ function PatientDashboard({ appointments, notifications, refresh, showMessage })
     }
   }
 
-  async function markNotificationRead(appointmentId) {
-    try {
-      await api(`/api/appointments/${appointmentId}/notification/read`, { method: "PATCH" })
-      await refresh()
-    } catch (error) {
-      showMessage(error.message)
-    }
-  }
-
   const pendingCount = appointments.filter(item => item.status === "pending").length
   const approvedCount = appointments.filter(item => item.status === "approved").length
 
@@ -454,26 +525,6 @@ function PatientDashboard({ appointments, notifications, refresh, showMessage })
         <StatCard label="Awaiting response" value={pendingCount} detail="Requests under review" />
         <StatCard label="Confirmed" value={approvedCount} detail="Approved appointments" />
       </section>
-      {notifications.length > 0 && (
-        <section className="panel notification-panel" aria-label="Appointment updates">
-          <div className="section-heading">
-            <div><span className="eyebrow">APPOINTMENT UPDATES</span><h2>New appointment updates</h2></div>
-            <span className="notification-count">{notifications.length} new</span>
-          </div>
-          <div className="notification-list">
-            {notifications.map(notification => (
-              <article className={`notification-item ${notification.status}`} key={notification.appointmentId}>
-                <span className="notification-icon" aria-hidden="true">{notification.status === "approved" ? "✓" : "!"}</span>
-                <div><strong>{notification.status === "approved" ? "Appointment approved" : notification.status === "cancelled" ? "Appointment cancelled" : "Appointment not approved"}</strong>
-                  <p>{notification.message}</p>
-                  <small>{new Date(notification.appointmentDate).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })} · {notification.appointmentTime}</small>
-                </div>
-                <button type="button" className="text-button" onClick={() => markNotificationRead(notification.appointmentId)}>Mark read</button>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
       <section className="panel">
         <div className="section-heading">
           <div><span className="eyebrow">YOUR CARE TEAM</span><h2>Find a doctor</h2></div>

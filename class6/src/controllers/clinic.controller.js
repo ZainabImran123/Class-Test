@@ -2,6 +2,10 @@ import bcrypt from "bcryptjs"
 import appointmentModel from "../models/appointments.model.js"
 import userModel from "../models/users.model.js"
 import { publicUser } from "./auth.controller.js"
+import {
+    notifyAppointmentBooked,
+    notifyAppointmentStatusChanged
+} from "../services/notification.service.js"
 
 const populatedAppointment = [
     { path: "patient", select: "name username email" },
@@ -118,6 +122,7 @@ async function bookAppointment(req, res) {
             reason: reason.trim()
         })
         await appointment.populate(populatedAppointment)
+        await notifyAppointmentBooked(appointment)
         return res.status(201).json({ appointment })
     } catch (error) {
         if (error.code === 11000) {
@@ -160,6 +165,7 @@ async function cancelPatientAppointment(req, res) {
         if (!appointment) {
             return res.status(404).json({ message: "Pending appointment not found" })
         }
+        await notifyAppointmentStatusChanged(appointment, "patient")
         return res.json({ appointment })
     } catch (error) {
         console.error("Could not cancel appointment:", error)
@@ -229,6 +235,7 @@ async function updateDoctorAppointment(req, res) {
         if (!appointment) {
             return res.status(404).json({ message: "Pending appointment not found" })
         }
+        await notifyAppointmentStatusChanged(appointment, "doctor")
         return res.json({ appointment })
     } catch (error) {
         if (error.name === "CastError") {
@@ -272,6 +279,7 @@ async function updateAdminAppointment(req, res) {
         if (!appointment) {
             return res.status(404).json({ message: "Appointment not found or is no longer eligible for this action" })
         }
+        await notifyAppointmentStatusChanged(appointment, "admin")
         return res.json({ appointment })
     } catch (error) {
         if (error.name === "CastError") {

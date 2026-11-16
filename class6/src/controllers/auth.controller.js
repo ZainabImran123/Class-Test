@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken"
 import bcrypt from "bcryptjs"
 import { OAuth2Client } from "google-auth-library"
 import { timingSafeEqual } from "node:crypto"
+import { notifyPatientRegistered } from "../services/notification.service.js"
 
 const googleClient = new OAuth2Client()
 
@@ -129,6 +130,9 @@ async function registerUser(req, res) {
             ...(isAdminEmail ? { adminAccountKey: "clinic-admin" } : {}),
             isActive: true
         })
+        if (user.role === "patient") {
+            await notifyPatientRegistered(user)
+        }
         issueToken(user, res, secret)
 
         return res.status(201).json({
@@ -223,6 +227,7 @@ async function googleLogin(req, res) {
         }
 
         let user = await userModel.findOne({ googleId: payload.sub })
+        let createdPatient = false
         if (user?.isActive === false) {
             return res.status(403).json({ message: "This account has been deactivated" })
         }
@@ -253,9 +258,13 @@ async function googleLogin(req, res) {
                     role: "patient",
                     isActive: true
                 })
+                createdPatient = true
             }
         }
 
+        if (createdPatient) {
+            await notifyPatientRegistered(user)
+        }
         issueToken(user, res, secret)
         return res.status(200).json({
             message: "Google sign-in successful",
