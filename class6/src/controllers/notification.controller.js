@@ -21,7 +21,7 @@ async function markNotificationRead(req, res) {
         const notification = await notificationModel.findOneAndUpdate(
             { _id: req.params.id, recipient: req.user._id, isRead: false },
             { $set: { isRead: true } },
-            { new: true }
+            { returnDocument: "after" }
         )
         if (!notification) {
             return res.status(404).json({ message: "Unread notification not found" })

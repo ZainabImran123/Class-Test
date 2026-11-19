@@ -160,7 +160,7 @@ async function cancelPatientAppointment(req, res) {
         const appointment = await appointmentModel.findOneAndUpdate(
             { _id: req.params.id, patient: req.user._id, status: "pending" },
             { $set: { status: "cancelled" }, $unset: { activeSlotKey: "" } },
-            { new: true, runValidators: true }
+            { returnDocument: "after", runValidators: true }
         ).populate(populatedAppointment)
         if (!appointment) {
             return res.status(404).json({ message: "Pending appointment not found" })
@@ -183,7 +183,7 @@ async function markAppointmentNotificationRead(req, res) {
                 patientNotifiedAt: null
             },
             { $set: { patientNotifiedAt: new Date() } },
-            { new: true }
+            { returnDocument: "after" }
         )
         if (!appointment) {
             return res.status(404).json({ message: "Unread appointment notification not found" })
@@ -230,7 +230,7 @@ async function updateDoctorAppointment(req, res) {
         const appointment = await appointmentModel.findOneAndUpdate(
             { _id: req.params.id, doctor: req.user._id, status: "pending" },
             update,
-            { new: true, runValidators: true }
+            { returnDocument: "after", runValidators: true }
         ).populate(populatedAppointment)
         if (!appointment) {
             return res.status(404).json({ message: "Pending appointment not found" })
@@ -274,7 +274,7 @@ async function updateAdminAppointment(req, res) {
         const appointment = await appointmentModel.findOneAndUpdate(
             filter,
             update,
-            { new: true, runValidators: true }
+            { returnDocument: "after", runValidators: true }
         ).populate(populatedAppointment)
         if (!appointment) {
             return res.status(404).json({ message: "Appointment not found or is no longer eligible for this action" })
@@ -403,7 +403,7 @@ async function updateUserStatus(req, res) {
         const user = await userModel.findOneAndUpdate(
             { _id: req.params.id, role: { $in: ["patient", "doctor", "user"] } },
             { $set: { isActive } },
-            { new: true, runValidators: true }
+            { returnDocument: "after", runValidators: true }
         )
         if (!user) {
             return res.status(404).json({ message: "Patient or doctor not found" })

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { GoogleLogin } from "@react-oauth/google"
 import gsap from "gsap"
 import Swal from "sweetalert2"
 import "sweetalert2/dist/sweetalert2.min.css"
@@ -32,7 +31,7 @@ function localTimeKey(date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
 }
 
-function App({ googleEnabled }) {
+function App() {
   const [user, setUser] = useState(null)
   const [mode, setMode] = useState("login")
   const [form, setForm] = useState({ name: "", email: "", password: "" })
@@ -44,6 +43,9 @@ function App({ googleEnabled }) {
   const [theme, setTheme] = useState(() => localStorage.getItem("carewell-theme") === "dark" ? "dark" : "light")
   const dashboardMotionRoot = useRef(null)
   const authMotionRoot = useRef(null)
+  const notificationMenuRef = useRef(null)
+  const notificationButtonRef = useRef(null)
+  const [notificationOpen, setNotificationOpen] = useState(false)
 
   const showMessage = useCallback((text, type = "error") => {
     void Swal.fire({
@@ -64,6 +66,30 @@ function App({ googleEnabled }) {
     document.documentElement.dataset.theme = theme
     localStorage.setItem("carewell-theme", theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!notificationOpen) return undefined
+
+    function dismissNotificationMenu(event) {
+      if (!notificationMenuRef.current?.contains(event.target)) {
+        setNotificationOpen(false)
+      }
+    }
+
+    function handleNotificationKeyDown(event) {
+      if (event.key === "Escape") {
+        setNotificationOpen(false)
+        notificationButtonRef.current?.focus()
+      }
+    }
+
+    document.addEventListener("pointerdown", dismissNotificationMenu)
+    document.addEventListener("keydown", handleNotificationKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", dismissNotificationMenu)
+      document.removeEventListener("keydown", handleNotificationKeyDown)
+    }
+  }, [notificationOpen])
 
   function toggleTheme() {
     setTheme(current => current === "light" ? "dark" : "light")
@@ -184,22 +210,6 @@ function App({ googleEnabled }) {
     }
   }
 
-  async function signInWithGoogle(credential) {
-    setBusy(true)
-    try {
-      const result = await api("/api/auth/google", {
-        method: "POST",
-        body: JSON.stringify({ credential })
-      })
-      setUser(result.user)
-      showMessage("Welcome to the clinic.", "success")
-    } catch (error) {
-      showMessage(error.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function logout() {
     try {
       await api("/api/auth/logout", { method: "POST" })
@@ -207,6 +217,7 @@ function App({ googleEnabled }) {
       setDashboard(null)
       setNotifications([])
       setUnreadCount(0)
+      setNotificationOpen(false)
       setForm({ name: "", email: "", password: "" })
       showMessage("You have been signed out.", "success")
     } catch (error) {
@@ -257,7 +268,33 @@ function App({ googleEnabled }) {
             <span>carewell<span className="brand-subtitle">CLINIC</span></span>
           </a>
           <div className="header-account">
-            {unreadCount > 0 && <span className="header-notification-count" aria-label={`${unreadCount} unread notifications`}>{unreadCount} new</span>}
+            <div className="notification-menu" ref={notificationMenuRef}>
+              <button
+                type="button"
+                className="notification-toggle"
+                ref={notificationButtonRef}
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+                aria-expanded={notificationOpen}
+                aria-controls={notificationOpen ? "notification-popover" : undefined}
+                onClick={() => setNotificationOpen(current => !current)}
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                  <path d="M10 21h4" />
+                </svg>
+                {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
+              </button>
+              {notificationOpen && (
+                <div className="notification-popover" id="notification-popover">
+                  <NotificationCenter
+                    notifications={notifications}
+                    unreadCount={unreadCount}
+                    onMarkRead={markNotificationRead}
+                    onMarkAllRead={markAllNotificationsRead}
+                  />
+                </div>
+              )}
+            </div>
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="account-copy">
               <strong>{displayName(user)}</strong>
@@ -273,13 +310,6 @@ function App({ googleEnabled }) {
             <h1>{user.role === "admin" ? "Clinic overview" : `Good to see you, ${displayName(user).split(" ")[0]}`}</h1>
             <p>{roleDescription(user.role)}</p>
           </div>
-
-          <NotificationCenter
-            notifications={notifications}
-            unreadCount={unreadCount}
-            onMarkRead={markNotificationRead}
-            onMarkAllRead={markAllNotificationsRead}
-          />
 
           {user.role === "patient" && (
             <PatientDashboard
@@ -343,23 +373,6 @@ function App({ googleEnabled }) {
               onClick={() => setMode("signup")}>Patient registration</button>
           </div>
 
-          {googleEnabled && (
-            <div className="google-wrap" aria-label="Continue with Google">
-              <GoogleLogin
-                text="continue_with"
-                shape="rectangular"
-                size="large"
-                theme="outline"
-                width="360"
-                onSuccess={result => result.credential
-                  ? signInWithGoogle(result.credential)
-                  : showMessage("Google did not return a sign-in credential.")}
-                onError={() => showMessage("Google sign-in could not be completed. Please try again.")}
-              />
-            </div>
-          )}
-
-          {googleEnabled && <div className="divider"><span>or continue with email</span></div>}
           <form onSubmit={submit} className="auth-form">
             {signup && (
               <label>
